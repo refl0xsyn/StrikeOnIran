@@ -1,0 +1,387 @@
+breed [ legend-items legend-item ]
+
+breed [ states state ]
+
+globals [
+  maritime-stress
+  energy-stress
+  infrastructure-stress
+  escalation-level
+  scenario
+  scenario-probs
+  ;infrastructure-risk
+  round-number
+]
+
+states-own [
+  state-name
+  state-escalation-level  ; 0–6
+  alignment               ; e.g. "US", "Iran", "Neutral"
+  risk-sensitivity        ; 0–1
+]
+
+to-report repeat-str [s n]
+  let out ""
+  repeat n [
+    set out (word out s)
+  ]
+  report out
+end
+
+
+to setup
+  ;clear-all
+  clear-turtles
+  clear-patches
+  load-map
+  set-default-shape states "person"
+  setup-states
+  setup-indicators
+  setup-scenarios
+  setup-legend
+  set round-number 1
+  reset-ticks
+end 
+
+to go
+  update-indicators
+  update-state-escalation
+  fuse-regional-escalation
+  apply-gates-and-update-scenarios
+  set round-number round-number + 1
+  tick
+end
+;====
+to setup-legend
+  clear-legend
+  
+  ;; Create 5 legend items
+  create-legend-items 5 [
+    set size 2
+    set shape "square"
+  ]
+
+  ;; Sort them so we can assign in order
+  let L sort legend-items
+
+  ;; Position and label each item
+  ask item 0 L [
+    setxy 22 -2
+    set color green
+    set label-color black
+    set label "S1 – De-escalation"
+  ]
+  ask item 1 L [
+    setxy 22 -4
+    set color yellow
+    set label-color black
+    set label "S2 – Controlled Tension"
+  ]
+  ask item 2 L [
+    setxy 22 -6
+    set color orange
+    set label-color black
+    set label "S3 – Proxy Escalation"
+  ]
+  ask item 3 L [
+    setxy 22 -8
+    set color red
+    set label-color black
+    set label "S4 – Direct Confrontation"
+  ]
+  ask item 4 L [
+    setxy 22 -10
+    set color violet
+    set label-color black
+    set label "S5 – Regional War"
+  ]
+end
+
+to clear-legend
+  ask legend-items [ die ]
+end
+
+;====
+to setup-states
+  clear-turtles
+  create-states 4 [
+    set risk-sensitivity random-float 1
+    set state-escalation-level 1
+    set alignment "US"
+    set color blue
+  ]
+
+  let s-list sort states
+
+  ask item 0 s-list [
+    set state-name "Bahrain"
+    setxy -12 2
+  ]
+  ask item 1 s-list [
+    set state-name "Qatar"
+    setxy -10 1
+  ]
+  ask item 2 s-list [
+    set state-name "Saudi Arabia"
+    setxy -18 -1
+  ]
+  ask item 3 s-list [
+    set state-name "UAE"
+    setxy 1 -2
+  ]
+
+  ask states [
+    set label state-name
+    set label-color black   
+    ;set label (word state-name "\nEsc: " precision state-escalation-level 2)
+    set label (word state-name "\nE:" state-escalation-level "\nS:" scenario)
+
+  ]
+end
+;====
+to setup-indicators
+  set maritime-stress 0.2
+  set energy-stress 0.2
+  set infrastructure-stress 0.1
+end
+
+to setup-scenarios
+  set scenario-probs [0.1 0.2 0.3 0.3 0.1]  ; S1..S5
+  set scenario 3
+  set escalation-level 2
+end
+;===
+to update-indicators
+  ;; Natural decay toward baseline (0.2)
+  set maritime-stress maritime-stress - 0.01
+  set energy-stress energy-stress - 0.008
+  set infrastructure-stress infrastructure-stress - 0.006
+
+  ;; Prevent negative values
+  set maritime-stress max list maritime-stress 0.2
+  set energy-stress max list energy-stress 0.2
+  set infrastructure-stress max list infrastructure-stress 0.1
+end
+
+;to update-indicators
+;  set maritime-stress min (list (maritime-stress + 0.02) 1)
+;  set energy-stress min (list (energy-stress + 0.015) 1)
+;  set infrastructure-stress min (list (infrastructure-stress + 0.01) 1)
+;end
+
+to update-state-escalation
+  ask states [
+    let pressure (maritime-stress + energy-stress + infrastructure-stress) / 3
+    let delta (pressure * risk-sensitivity)
+
+    if delta > 0.4 [
+      set state-escalation-level state-escalation-level + 1
+    ]
+    if delta < 0.1 [
+      set state-escalation-level state-escalation-level - 1
+    ]
+
+    set state-escalation-level max list 0 state-escalation-level
+    set state-escalation-level min list 6 state-escalation-level
+
+    ;set color scale-color red state-escalation-level 0 6
+    if alignment = "US"    [ set color scale-color blue state-escalation-level 0 6 ]
+    if alignment = "Iran"  [ set color scale-color red state-escalation-level 0 6 ]
+    if alignment = "Neutral" [ set color scale-color gray state-escalation-level 0 6 ]
+
+  
+    let halo-color scale-color yellow (maritime-stress + energy-stress + infrastructure-stress) 0 3
+    set pen-size 2
+    set pen-mode "up"
+    set pen-mode "down"
+    set color halo-color
+    ;---
+    set size 1 + (maritime-stress + energy-stress + infrastructure-stress)
+    ;---
+    ;let stress (maritime-stress + energy-stress + infrastructure-stress) / 3
+    ;set label (word state-name "\n[" repeat (round (stress * 10)) "|" repeat (10 - round (stress * 10)) "-" "]")
+    let stress (maritime-stress + energy-stress + infrastructure-stress) / 3
+    let filled round (stress * 10)
+    let empty 10 - filled
+    set label (word state-name "\n[" repeat-str "|" filled repeat-str "-" empty "]")
+
+  ]
+
+end
+
+to cap-indicators
+  ;; upper bound
+  set maritime-stress min list maritime-stress 1
+  set energy-stress min list energy-stress 1
+  set infrastructure-stress min list infrastructure-stress 1
+
+  ;; lower bound (baseline)
+  set maritime-stress max list maritime-stress 0.2
+  set energy-stress max list energy-stress 0.2
+  set infrastructure-stress max list infrastructure-stress 0.1
+end
+
+
+to fuse-regional-escalation
+  set escalation-level mean [state-escalation-level] of states
+  ;ask patches [
+  ;set pcolor scale-color red escalation-level 0 6
+  ;]
+
+end
+;===
+to apply-gates-and-update-scenarios
+  ;; unpack current probabilities
+  let pS1 item 0 scenario-probs
+  let pS2 item 1 scenario-probs
+  let pS3 item 2 scenario-probs
+  let pS4 item 3 scenario-probs
+  let pS5 item 4 scenario-probs
+
+  ;; ============================
+  ;; 1. INDICATOR-DRIVEN GATES
+  ;; ============================
+
+  ;; Gate A – High tension: shift S3 → S4/S5
+  if (maritime-stress > 0.6) and (energy-stress > 0.5) and (infrastructure-stress > 0.4) [
+    set pS5 pS5 + 0.05
+    set pS4 pS4 + 0.03
+    set pS3 pS3 - 0.08
+  ]
+
+  ;; Gate B – Moderate tension: S2 → S3
+  if (maritime-stress > 0.4) and (energy-stress > 0.3) [
+    set pS3 pS3 + 0.05
+    set pS2 pS2 - 0.05
+  ]
+
+  ;; Gate C – De-escalation: S4/S5 → S1/S2
+  if (maritime-stress < 0.3) and (energy-stress < 0.3) and (escalation-level < 2) [
+    set pS1 pS1 + 0.05
+    set pS2 pS2 + 0.03
+    set pS4 pS4 - 0.04
+    set pS5 pS5 - 0.04
+  ]
+
+  ;; ============================
+  ;; 2. ESCALATION-DRIVEN GATES
+  ;; ============================
+
+  ;; Gate D – High escalation: S4 → S5
+  if escalation-level > 3.5 [
+    set pS5 pS5 + 0.10
+    set pS4 pS4 - 0.10
+  ]
+
+  ;; Gate E – Low escalation: S3 → S1
+  if escalation-level < 1.5 [
+    set pS1 pS1 + 0.07
+    set pS3 pS3 - 0.07
+  ]
+
+  ;; ============================
+  ;; 3. CLEAN-UP & NORMALIZATION
+  ;; ============================
+
+  ;; no negative probabilities
+  set pS1 max list pS1 0
+  set pS2 max list pS2 0
+  set pS3 max list pS3 0
+  set pS4 max list pS4 0
+  set pS5 max list pS5 0
+
+  ;; normalize to sum to 1
+  let total (pS1 + pS2 + pS3 + pS4 + pS5)
+  if total = 0 [ set total 1 ]
+
+  set pS1 pS1 / total
+  set pS2 pS2 / total
+  set pS3 pS3 / total
+  set pS4 pS4 / total
+  set pS5 pS5 / total
+
+  set scenario-probs (list pS1 pS2 pS3 pS4 pS5)
+
+  ;; ============================
+  ;; 4. DOMINANT SCENARIO
+  ;; ============================
+
+  let probs scenario-probs
+  let max-p max probs
+  let idx position max-p probs
+  set scenario (idx + 1)
+  ;----
+  let scen scenario
+  if scen = 1 [ ask patches [ set pcolor green ] ]
+  if scen = 2 [ ask patches [ set pcolor yellow ] ]
+  if scen = 3 [ ask patches [ set pcolor orange ] ]
+  if scen = 4 [ ask patches [ set pcolor red ] ]
+  if scen = 5 [ ask patches [ set pcolor violet ] ]
+
+end
+
+
+;===
+to load-map
+  import-drawing "PersianGulf.png"
+  ;import-drawing "legend.png"
+end
+
+
+;; ============================
+;; EVENT PANEL PROCEDURES
+;; ============================
+
+to flash-US-strike
+  ask patches with [pxcor > -5 and pycor > -5] [
+    set pcolor red
+  ]
+  wait 0.2
+  ask patches [ set pcolor black ]
+end
+
+to US_Strike
+  set maritime-stress maritime-stress + 0.15
+  set energy-stress energy-stress + 0.10
+  set infrastructure-stress infrastructure-stress + 0.05
+  ask states [ set state-escalation-level state-escalation-level + 0.5 ]
+  cap-indicators
+  ;flash-US-strike
+end
+
+to Iranian_Response
+  set maritime-stress maritime-stress + 0.10
+  set energy-stress energy-stress + 0.05
+  set infrastructure-stress infrastructure-stress + 0.10
+  ask states [ set state-escalation-level state-escalation-level + 0.4 ]
+  cap-indicators
+end
+
+to Houthi_Attack
+  set maritime-stress maritime-stress + 0.12
+  set energy-stress energy-stress + 0.08
+  ask states [ set state-escalation-level state-escalation-level + 0.3 ]
+  cap-indicators
+end
+
+to Hezbollah_Escalation
+  set infrastructure-stress infrastructure-stress + 0.15
+  set energy-stress energy-stress + 0.10
+  ask states [ set state-escalation-level state-escalation-level + 0.4 ]
+  cap-indicators
+end
+
+to Ceasefire_Move
+  set maritime-stress maritime-stress - 0.10
+  set energy-stress energy-stress - 0.10
+  set infrastructure-stress infrastructure-stress - 0.10
+  ask states [ set state-escalation-level state-escalation-level - 0.5 ]
+  cap-indicators
+end
+
+to Diplomatic_Shift
+  set maritime-stress maritime-stress - 0.05
+  set energy-stress energy-stress - 0.05
+  ask states [ set state-escalation-level state-escalation-level - 0.3 ]
+  cap-indicators
+end
