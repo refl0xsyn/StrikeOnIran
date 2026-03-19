@@ -1,7 +1,7 @@
 # StrikeOnIran – NetLogo Conflict Simulation
 
 A geopolitical simulation model in NetLogo exploring escalation dynamics between the US/Israel and Iran,
-inspired by Mohsen.Solhdoost-style scenario analysis.
+inspired by Mohsen.Solhdoost-style scenario analysis. (https://msolhdoost.substack.com/)
 
 ## Files
 
